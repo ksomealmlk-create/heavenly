@@ -1,4 +1,4 @@
-name: Export Zero G
+name: Export Zero G APK
 on: [push, workflow_dispatch]
 
 jobs:
@@ -17,17 +17,28 @@ jobs:
 
       - name: Setup templates
         run: |
-          mkdir -p ~/.local/share/godot/export_templates/
-          mv /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p ~/.local/share/godot/export_templates/4.3.stable
+          cp -r /root/.local/share/godot/export_templates/4.3.stable/* ~/.local/share/godot/export_templates/4.3.stable/ || true
 
-      - name: Export
+      - name: Setup Android
+        run: |
+          keytool -genkeypair -v -keystore debug.keystore -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          godot --headless --quit || true
+          cat >> ~/.config/godot/editor_settings-4.tres <<EOF
+          export/android/android_sdk_path = "/usr/lib/android-sdk"
+          export/android/debug_keystore = "$(pwd)/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+
+      - name: Export APK
         run: |
           cd "$PROJECT_DIR"
-          mkdir -p build/windows
+          mkdir -p build/android
           godot --headless --import || true
-          godot --headless --export-release "Windows Desktop" build/windows/zero-g.exe
+          godot --headless --export-debug "Android" build/android/zero-g.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows
-          path: ${{ env.PROJECT_DIR }}/build/windows
+          name: android-apk
+          path: ${{ env.PROJECT_DIR }}/build/android
