@@ -1,0 +1,33 @@
+name: Export Zero G
+on: [push, workflow_dispatch]
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          unzip -q ZeroG-Station.zip -d src
+          PROJ=$(dirname "$(find src -name project.godot | head -n1)")
+          echo "PROJECT_DIR=$PROJ" >> $GITHUB_ENV
+
+      - name: Setup templates
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/
+          mv /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+
+      - name: Export
+        run: |
+          cd "$PROJECT_DIR"
+          mkdir -p build/windows
+          godot --headless --import || true
+          godot --headless --export-release "Windows Desktop" build/windows/zero-g.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: ${{ env.PROJECT_DIR }}/build/windows
