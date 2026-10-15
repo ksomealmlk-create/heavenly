@@ -31,7 +31,7 @@ jobs:
           unzip -q tools.zip
           mv cmdline-tools latest
           yes | /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk --licenses > /dev/null || true
-          /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk "platform-tools" "build-tools;34.0.0" "platforms;android-34" "cmdline-tools;latest" "cmake;3.10.2.4988898" "ndk;23.2.8568313"
+          /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk "platform-tools" "build-tools;34.0.0" "platforms;android-34" "cmdline-tools;latest"
           ls /opt/android-sdk /opt/android-sdk/build-tools
 
       - name: Setup Godot Android settings
