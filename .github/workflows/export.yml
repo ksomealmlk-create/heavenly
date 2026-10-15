@@ -6,6 +6,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.3
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -13,18 +16,25 @@ jobs:
         run: |
           unzip -q ZeroG-Station.zip -d src
           PROJ=$(dirname "$(find src -name project.godot | head -n1)")
-          echo "PROJECT_DIR=$PROJ" >> $GITHUB_ENV
+          echo "PROJECT_DIR=$(realpath "$PROJ")" >> $GITHUB_ENV
+          ls -la "$PROJ"
 
-      - name: Setup templates
+      - name: Setup export templates
         run: |
-          mkdir -p ~/.local/share/godot/export_templates/4.3.stable
-          cp -r /root/.local/share/godot/export_templates/4.3.stable/* ~/.local/share/godot/export_templates/4.3.stable/ || true
+          DEST="$HOME/.local/share/godot/export_templates/4.3.stable"
+          SRC=$(find / -type d -path "*export_templates/4.3.stable" 2>/dev/null | grep -v "^$DEST$" | head -n1)
+          echo "HOME=$HOME"
+          echo "Templates source: $SRC"
+          mkdir -p "$DEST"
+          if [ -n "$SRC" ]; then cp -rn "$SRC"/* "$DEST"/; fi
+          ls -la "$DEST" | head -40
+          test -f "$DEST/android_debug.apk" || { echo "ERROR: android_debug.apk missing"; exit 1; }
 
       - name: Install Android SDK
         run: |
           apt-get update -qq && apt-get install -y -qq wget unzip openjdk-17-jdk
-          export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
-          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
+          JH=$(dirname $(dirname $(readlink -f $(which javac))))
+          echo "JAVA_HOME=$JH" >> $GITHUB_ENV
           mkdir -p /opt/android-sdk/cmdline-tools
           cd /opt/android-sdk/cmdline-tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
@@ -38,8 +48,9 @@ jobs:
         run: |
           rm -f /root/debug.keystore
           keytool -genkeypair -v -keystore /root/debug.keystore -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          mkdir -p ~/.config/godot
-          cat > ~/.config/godot/editor_settings-4.3.tres <<EOF
+          for D in "$HOME/.config/godot" "/root/.config/godot"; do
+            mkdir -p "$D"
+            cat > "$D/editor_settings-4.3.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
 
           [resource]
@@ -49,14 +60,64 @@ jobs:
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
-          cp ~/.config/godot/editor_settings-4.3.tres ~/.config/godot/editor_settings-4.tres
+            cp "$D/editor_settings-4.3.tres" "$D/editor_settings-4.tres"
+          done
+          cat "$HOME/.config/godot/editor_settings-4.3.tres"
+
+      - name: Prepare export preset
+        run: |
+          cd "$PROJECT_DIR"
+          if [ ! -f export_presets.cfg ] || ! grep -q 'platform="Android"' export_presets.cfg; then
+            echo "No Android preset found - generating one"
+            cat > export_presets.cfg <<'EOF'
+          [preset.0]
+
+          name="Android"
+          platform="Android"
+          runnable=true
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          include_filter=""
+          exclude_filter=""
+          export_path=""
+
+          [preset.0.options]
+
+          gradle_build/use_gradle_build=false
+          architectures/armeabi-v7a=false
+          architectures/arm64-v8a=true
+          architectures/x86=false
+          architectures/x86_64=false
+          version/code=1
+          version/name="1.0"
+          package/unique_name="com.zerog.station"
+          package/name="ZeroG Station"
+          package/signed=true
+          screen/immersive_mode=true
+          EOF
+          else
+            echo "Patching existing preset"
+            sed -i 's/^gradle_build\/use_gradle_build=.*/gradle_build\/use_gradle_build=false/' export_presets.cfg
+            sed -i 's/^package\/unique_name=.*/package\/unique_name="com.zerog.station"/' export_presets.cfg
+            sed -i 's/^custom_template\/debug=.*/custom_template\/debug=""/' export_presets.cfg
+            sed -i 's/^custom_template\/release=.*/custom_template\/release=""/' export_presets.cfg
+            sed -i 's/^architectures\/arm64-v8a=.*/architectures\/arm64-v8a=true/' export_presets.cfg
+          fi
+          cat export_presets.cfg
 
       - name: Export APK
         run: |
           cd "$PROJECT_DIR"
           mkdir -p build/android
-          godot --headless --import || true
-          godot --headless --export-debug "Android" "$(pwd)/build/android/zero-g.apk"
+          godot --headless --import > import.log 2>&1 || true
+          tail -20 import.log
+          if ! godot --headless --verbose --export-debug "Android" "$(pwd)/build/android/zero-g.apk" > export.log 2>&1; then
+            echo "=========== EXPORT FAILED - last 80 lines ==========="
+            tail -80 export.log
+            exit 1
+          fi
+          tail -20 export.log
           ls -la build/android
 
       - uses: actions/upload-artifact@v4
