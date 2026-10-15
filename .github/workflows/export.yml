@@ -64,47 +64,17 @@ jobs:
           done
           cat "$HOME/.config/godot/editor_settings-4.3.tres"
 
-      - name: Prepare export preset
+      - name: Enable ETC2/ASTC
         run: |
           cd "$PROJECT_DIR"
-          if [ ! -f export_presets.cfg ] || ! grep -q 'platform="Android"' export_presets.cfg; then
-            echo "No Android preset found - generating one"
-            cat > export_presets.cfg <<'EOF'
-          [preset.0]
-
-          name="Android"
-          platform="Android"
-          runnable=true
-          dedicated_server=false
-          custom_features=""
-          export_filter="all_resources"
-          include_filter=""
-          exclude_filter=""
-          export_path=""
-
-          [preset.0.options]
-
-          gradle_build/use_gradle_build=false
-          architectures/armeabi-v7a=false
-          architectures/arm64-v8a=true
-          architectures/x86=false
-          architectures/x86_64=false
-          version/code=1
-          version/name="1.0"
-          package/unique_name="com.zerog.station"
-          package/name="ZeroG Station"
-          package/signed=true
-          screen/immersive_mode=true
-          EOF
+          if grep -q "import_etc2_astc" project.godot; then
+            sed -i 's/^textures\/vram_compression\/import_etc2_astc=.*/textures\/vram_compression\/import_etc2_astc=true/' project.godot
+          elif grep -q "^\[rendering\]" project.godot; then
+            sed -i '/^\[rendering\]/a textures/vram_compression/import_etc2_astc=true' project.godot
           else
-            echo "Patching existing preset"
-            sed -i 's/^gradle_build\/use_gradle_build=.*/gradle_build\/use_gradle_build=false/' export_presets.cfg
-            sed -i 's/^package\/unique_name=.*/package\/unique_name="com.zerog.station"/' export_presets.cfg
-            sed -i 's/^custom_template\/debug=.*/custom_template\/debug=""/' export_presets.cfg
-            sed -i 's/^custom_template\/release=.*/custom_template\/release=""/' export_presets.cfg
-            sed -i 's/^architectures\/arm64-v8a=.*/architectures\/arm64-v8a=true/' export_presets.cfg
+            printf '\n[rendering]\n\ntextures/vram_compression/import_etc2_astc=true\n' >> project.godot
           fi
-          cat export_presets.cfg
+          grep -n -A4 "^\[rendering\]" project.godot
 
       - name: Export APK
         run: |
