@@ -6,6 +6,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.3
+    env:
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/debug.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
     steps:
       - uses: actions/checkout@v4
 
@@ -22,14 +26,24 @@ jobs:
 
       - name: Setup Android
         run: |
-          keytool -genkeypair -v -keystore debug.keystore -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          godot --headless --quit || true
-          cat >> ~/.config/godot/editor_settings-4.tres <<EOF
+          rm -f /root/debug.keystore
+          keytool -genkeypair -v -keystore /root/debug.keystore -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          JAVA_PATH="${JAVA_HOME:-$(dirname $(dirname $(readlink -f $(which java))))}"
+          mkdir -p ~/.config/godot
+          for f in editor_settings-4.3.tres editor_settings-4.tres; do
+          cat > ~/.config/godot/$f <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
           export/android/android_sdk_path = "/usr/lib/android-sdk"
-          export/android/debug_keystore = "$(pwd)/debug.keystore"
+          export/android/java_sdk_path = "$JAVA_PATH"
+          export/android/debug_keystore = "/root/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
+          done
+          echo "JAVA_PATH=$JAVA_PATH"
+          ls /usr/lib/android-sdk/build-tools
 
       - name: Export APK
         run: |
